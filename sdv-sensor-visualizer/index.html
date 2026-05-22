@@ -1,0 +1,2253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Interactive 3D visualization of automotive sensors in Software Defined Vehicles (SDV)" />
+  <title>SDV Sensor Suite — Automotive Sensor Visualization</title>
+
+  <!-- Three.js via import map (ES modules) -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ==========================================================================
+       Premium EV dashboard tokens (Mercedes EQ / Tesla-inspired)
+       ========================================================================== */
+    :root {
+      --bg-primary: #0b0e14;
+      --bg-elevated: #121820;
+      --bg-glass: rgba(14, 18, 26, 0.72);
+      --border-glass: rgba(255, 255, 255, 0.06);
+      --border-accent: rgba(120, 200, 255, 0.18);
+      --accent: #7ec8ff;
+      --accent-soft: rgba(126, 200, 255, 0.12);
+      --accent-glow: rgba(126, 200, 255, 0.35);
+      --text-primary: #f2f4f7;
+      --text-secondary: #9aa3b2;
+      --text-muted: #5e6673;
+      --radius: 14px;
+      --radius-sm: 10px;
+      --radius-pill: 999px;
+      --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+      --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+      --transition-fast: 0.2s var(--ease-smooth);
+      --transition-ui: 0.45s var(--ease-out);
+      --header-h: 52px;
+      --sidebar-w: 248px;
+      --bottom-h: 88px;
+      --panel-w: 360px;
+    }
+
+    /* Light mode UI tokens */
+    html[data-theme="light"] {
+      --bg-primary: #e8ecf2;
+      --bg-elevated: #f4f6f9;
+      --bg-glass: rgba(255, 255, 255, 0.72);
+      --border-glass: rgba(0, 0, 0, 0.08);
+      --border-accent: rgba(59, 130, 196, 0.25);
+      --accent: #3b82c4;
+      --accent-soft: rgba(59, 130, 196, 0.12);
+      --accent-glow: rgba(59, 130, 196, 0.2);
+      --text-primary: #1a2332;
+      --text-secondary: #5a6578;
+      --text-muted: #8b95a5;
+    }
+
+    html[data-theme="light"] body::before {
+      background:
+        radial-gradient(ellipse 80% 50% at 50% 100%, rgba(100, 140, 200, 0.1) 0%, transparent 55%),
+        radial-gradient(ellipse 60% 40% at 80% 20%, rgba(59, 130, 196, 0.06) 0%, transparent 50%);
+    }
+
+    html[data-theme="light"] .canvas-vignette {
+      background: radial-gradient(
+        ellipse 75% 70% at 50% 45%,
+        transparent 40%,
+        rgba(232, 236, 242, 0.45) 100%
+      );
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      font-size: 16px;
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: "Inter", system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow: hidden;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Ambient dashboard backdrop */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 50% at 50% 100%, rgba(60, 100, 140, 0.08) 0%, transparent 55%),
+        radial-gradient(ellipse 60% 40% at 80% 20%, rgba(126, 200, 255, 0.04) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ==========================================================================
+       Layout — Header, Main, Panels
+       ========================================================================== */
+    .app-header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: var(--header-h);
+      z-index: 100;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      padding: 0 1rem 0 1.25rem;
+      background: rgba(6, 8, 12, 0.88);
+      border-bottom: 1px solid var(--border-glass);
+      backdrop-filter: blur(16px);
+      pointer-events: none;
+    }
+
+    .app-header > * { pointer-events: auto; }
+
+    .app-header__brand {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      justify-self: start;
+      text-decoration: none;
+    }
+
+    .app-header__logo {
+      display: block;
+      height: 44px;
+      width: auto;
+      max-width: 168px;
+      object-fit: contain;
+      object-position: left center;
+    }
+
+    .app-header__title {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .app-header__nav {
+      display: flex;
+      gap: 0.15rem;
+      justify-self: center;
+      list-style: none;
+    }
+
+    .app-header__nav a {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      text-decoration: none;
+      padding: 0.4rem 0.85rem;
+      border-radius: var(--radius-pill);
+      transition: color var(--transition-fast), background var(--transition-fast);
+    }
+
+    .app-header__nav a:hover { color: var(--text-primary); }
+
+    .app-header__nav a.is-active {
+      color: var(--accent);
+      background: var(--accent-soft);
+      box-shadow: inset 0 -2px 0 var(--accent);
+    }
+
+    .app-header__actions {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      justify-self: end;
+    }
+
+    .theme-switch {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .theme-toggle {
+      width: 44px;
+      height: 24px;
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--border-glass);
+      background: var(--bg-elevated);
+      cursor: pointer;
+      position: relative;
+      transition: background var(--transition-fast);
+    }
+
+    .theme-toggle::after {
+      content: "";
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent-glow);
+      transition: transform var(--transition-fast);
+    }
+
+    html[data-theme="light"] .theme-toggle::after {
+      transform: translateX(20px);
+    }
+
+    /* Left sidebar — legend, controls, toggles */
+    .sidebar-left {
+      position: fixed;
+      top: var(--header-h);
+      left: 0;
+      width: var(--sidebar-w);
+      bottom: var(--bottom-h);
+      z-index: 50;
+      padding: 0.85rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      overflow-y: auto;
+      border-right: 1px solid var(--border-glass);
+    }
+
+    .panel-block__title {
+      font-size: 0.62rem;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 0.55rem;
+    }
+
+    .sensor-legend {
+      position: static;
+      transform: none;
+      padding: 0.85rem;
+      width: 100%;
+    }
+
+    .sensor-legend__title {
+      display: block;
+    }
+
+    .sensor-legend__list {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.35rem;
+      max-width: none;
+    }
+
+    .sensor-legend__item {
+      justify-content: space-between;
+      padding: 0.45rem 0.55rem;
+      border-radius: var(--radius-sm);
+    }
+
+    .sensor-legend__item-left {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .sensor-legend__swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      box-shadow: 0 0 12px currentColor;
+    }
+
+    .sensor-legend__count {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .view-controls {
+      padding: 0.75rem 0.85rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .view-controls__btn {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 0.5rem;
+      border: none;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: background var(--transition-fast), color var(--transition-fast);
+    }
+
+    .view-controls__btn:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-primary);
+    }
+
+    .display-toggles {
+      padding: 0.75rem 0.85rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+    }
+
+    .toggle-pill {
+      width: 36px;
+      height: 20px;
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--border-glass);
+      background: var(--bg-elevated);
+      cursor: pointer;
+      position: relative;
+    }
+
+    .toggle-pill.is-on { background: var(--accent-soft); border-color: var(--border-accent); }
+
+    .toggle-pill::after {
+      content: "";
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      transition: transform var(--transition-fast), background var(--transition-fast);
+    }
+
+    .toggle-pill.is-on::after {
+      transform: translateX(16px);
+      background: var(--accent);
+      box-shadow: 0 0 6px var(--accent-glow);
+    }
+
+    .app-main {
+      position: fixed;
+      top: var(--header-h);
+      left: var(--sidebar-w);
+      right: var(--panel-w);
+      bottom: var(--bottom-h);
+    }
+
+    #canvas-container {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      cursor: grab;
+      z-index: 1;
+    }
+
+    #canvas-container.is-dragging {
+      cursor: grabbing;
+    }
+
+    /* Cinematic vignette over 3D view */
+    .canvas-vignette {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 2;
+      background: radial-gradient(
+        ellipse 75% 70% at 50% 45%,
+        transparent 35%,
+        rgba(6, 8, 12, 0.5) 100%
+      );
+    }
+
+    /* ==========================================================================
+       Glass Panels — Legend, Tooltip, Side Panel
+       ========================================================================== */
+    .glass-panel {
+      background: var(--bg-glass);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius);
+      backdrop-filter: blur(20px) saturate(1.2);
+      -webkit-backdrop-filter: blur(20px) saturate(1.2);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.04),
+        0 12px 40px rgba(0, 0, 0, 0.35);
+    }
+
+    .sensor-legend__list { list-style: none; }
+
+    .sensor-legend__item {
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: background var(--transition-ui), border-color var(--transition-ui);
+    }
+
+    .sensor-legend__item:hover,
+    .sensor-legend__item.is-active {
+      background: var(--accent-soft);
+      border-color: var(--border-accent);
+    }
+
+    .sensor-legend__label {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+    }
+
+    .sensor-legend__item.is-active .sensor-legend__label { color: var(--text-primary); }
+
+    /* Bottom view bar */
+    .view-bar {
+      position: fixed;
+      left: var(--sidebar-w);
+      right: var(--panel-w);
+      bottom: 0;
+      height: var(--bottom-h);
+      z-index: 55;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 0 1.25rem;
+      border-top: 1px solid var(--border-glass);
+      background: rgba(6, 8, 12, 0.9);
+      backdrop-filter: blur(16px);
+    }
+
+    .view-bar__label {
+      font-size: 0.62rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .view-bar__views {
+      display: flex;
+      gap: 0.5rem;
+      overflow-x: auto;
+    }
+
+    .view-thumb {
+      flex-shrink: 0;
+      width: 72px;
+      padding: 0.4rem 0.5rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-glass);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-muted);
+      font-size: 0.65rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+    }
+
+    .view-thumb.is-active {
+      border-color: var(--accent);
+      color: var(--accent);
+      box-shadow: 0 0 16px var(--accent-glow);
+    }
+
+    .view-thumb__icon {
+      display: block;
+      font-size: 1.1rem;
+      margin-bottom: 0.2rem;
+      opacity: 0.8;
+    }
+
+    /* Compass */
+    .compass {
+      position: fixed;
+      right: calc(var(--panel-w) + 1rem);
+      bottom: calc(var(--bottom-h) + 0.75rem);
+      z-index: 45;
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.55rem;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    .compass__ring {
+      position: absolute;
+      inset: 0;
+      border: 1px solid var(--border-glass);
+      border-radius: 50%;
+      background: var(--bg-glass);
+      backdrop-filter: blur(8px);
+    }
+
+    .compass__n {
+      position: absolute;
+      top: 4px;
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .grid-fade {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 2;
+      background: radial-gradient(ellipse 70% 55% at 50% 50%, transparent 25%, rgba(11, 14, 20, 0.65) 100%);
+    }
+
+    /* 3D sensor labels (CSS2D) — transform set in JS for collision offsets */
+    .sensor-label-3d {
+      position: relative;
+      padding: 0.2rem 0.45rem;
+      font-size: 0.62rem;
+      font-weight: 500;
+      color: #fff;
+      background: rgba(8, 12, 18, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 4px;
+      white-space: nowrap;
+      pointer-events: none;
+      text-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
+      transform: translate(-50%, calc(-100% - 4px));
+      will-change: transform;
+    }
+
+    .sensor-label-3d.is-highlighted {
+      z-index: 10;
+      box-shadow: 0 0 12px rgba(126, 200, 255, 0.35);
+    }
+
+    .sensor-label-3d::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: -14px;
+      width: 1px;
+      height: 14px;
+      transform: translateX(-50%);
+      background: currentColor;
+      opacity: 0.45;
+    }
+
+    /* 3D hover spec card (mockup popup) */
+    .sensor-hover-card {
+      display: none;
+      min-width: 200px;
+      max-width: 240px;
+      padding: 0.75rem 0.9rem 0.65rem;
+      background: rgba(10, 14, 22, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+      pointer-events: auto;
+    }
+
+    .sensor-hover-card.is-visible { display: block; }
+
+    .sensor-hover-card__head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .sensor-hover-card__title {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .sensor-hover-card__close {
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 1rem;
+      line-height: 1;
+      padding: 0;
+    }
+
+    .sensor-hover-card__row {
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+      margin-top: 0.25rem;
+    }
+
+    .sensor-hover-card__row strong {
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+
+    /* Right sensor details — always visible (mockup) */
+    .info-panel {
+      position: fixed;
+      top: var(--header-h);
+      right: 0;
+      width: var(--panel-w);
+      max-width: 100%;
+      height: calc(100vh - var(--header-h) - var(--bottom-h));
+      z-index: 90;
+      padding: 1rem 1.1rem 1.25rem;
+      overflow-y: auto;
+      transform: translateX(0);
+      border-left: 1px solid var(--border-glass);
+      border-radius: 0;
+    }
+
+    .info-panel__close {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      width: 36px;
+      height: 36px;
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 1.25rem;
+      line-height: 1;
+      transition: color var(--transition), border-color var(--transition), background var(--transition);
+    }
+
+    .info-panel__close:hover {
+      color: var(--accent);
+      border-color: var(--border-accent);
+      background: rgba(0, 212, 255, 0.06);
+    }
+
+    .info-panel__hardware {
+      width: 100%;
+      height: 120px;
+      border-radius: var(--radius-sm);
+      margin-bottom: 0.85rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(145deg, rgba(30, 40, 55, 0.9), rgba(10, 14, 20, 0.95));
+      border: 1px solid var(--border-glass);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .info-panel__hardware-icon {
+      font-size: 2.5rem;
+      opacity: 0.35;
+      filter: drop-shadow(0 0 20px var(--accent-glow));
+    }
+
+    .info-panel__type-badge {
+      display: inline-block;
+      font-size: 0.58rem;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      padding: 0.2rem 0.55rem;
+      border-radius: var(--radius-pill);
+      margin-bottom: 0.4rem;
+    }
+
+    .info-panel__name {
+      font-size: 1.2rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.75rem;
+      padding-right: 2rem;
+      line-height: 1.2;
+    }
+
+    .spec-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.45rem 0.75rem;
+      margin-bottom: 1rem;
+      font-size: 0.72rem;
+    }
+
+    .spec-grid dt {
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-size: 0.58rem;
+    }
+
+    .spec-grid dd {
+      color: var(--text-primary);
+      margin: 0;
+      font-weight: 500;
+    }
+
+    .info-panel__logos {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+
+    .info-panel__logo-chip {
+      padding: 0.35rem 0.65rem;
+      border-radius: var(--radius-sm);
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-glass);
+      font-size: 0.68rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      letter-spacing: 0.04em;
+    }
+
+    .info-panel__section {
+      margin-bottom: 1rem;
+      padding-top: 0.85rem;
+      border-top: 1px solid var(--border-glass);
+    }
+
+    .info-panel__section:first-of-type {
+      border-top: none;
+      padding-top: 0;
+    }
+
+    .info-panel__section-title {
+      font-size: 0.62rem;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+    }
+
+    .info-panel__body {
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+      line-height: 1.65;
+    }
+
+    .info-panel__companies {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-top: 0.5rem;
+    }
+
+    .info-panel__chip {
+      font-size: 0.68rem;
+      padding: 0.25rem 0.55rem;
+      border-radius: var(--radius-pill);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-glass);
+      color: var(--text-secondary);
+    }
+
+    .info-panel__range {
+      font-variant-numeric: tabular-nums;
+      font-size: 0.8rem;
+      color: var(--accent);
+    }
+
+    .info-panel__divider {
+      height: 1px;
+      background: var(--border-glass);
+      margin: 0.5rem 0;
+    }
+
+    /* ==========================================================================
+       Loading Overlay (bonus)
+       ========================================================================== */
+    .loading-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-primary);
+      transition: opacity 0.5s ease, visibility 0.5s ease;
+    }
+
+    .loading-overlay.is-hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .loading-overlay__spinner {
+      width: 48px;
+      height: 48px;
+      border: 2px solid var(--border-glass);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+      margin-bottom: 1.25rem;
+    }
+
+    .loading-overlay__logo {
+      height: 72px;
+      width: auto;
+      max-width: 220px;
+      object-fit: contain;
+      margin-bottom: 1rem;
+    }
+
+    .loading-overlay__text {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+    }
+
+    .loading-overlay__progress {
+      width: 160px;
+      height: 3px;
+      background: var(--bg-elevated);
+      border-radius: 2px;
+      margin-top: 1rem;
+      overflow: hidden;
+    }
+
+    .loading-overlay__bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      border-radius: 2px;
+      transition: width 0.2s ease;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ==========================================================================
+       Mobile / Tablet Fallback
+       ========================================================================== */
+    @media (min-width: 901px) {
+      .info-panel {
+        transform: translateX(0) !important;
+      }
+    }
+
+    @media (max-width: 900px) {
+      :root { --sidebar-w: 0; --panel-w: min(100%, 320px); }
+      .sidebar-left { display: none; }
+      .app-main { left: 0; right: 0; }
+      .view-bar { left: 0; right: 0; }
+      .info-panel {
+        transform: translateX(100%);
+        transition: transform 0.4s var(--ease-out);
+        z-index: 95;
+      }
+      .info-panel.is-drawer-open { transform: translateX(0); }
+      .compass { right: 1rem; }
+      .app-header__nav { display: none; }
+    }
+
+    @media (max-width: 600px) {
+      .info-panel { width: 100%; border-radius: 0; height: calc(100vh - var(--header-h)); }
+      .view-bar { padding: 0 0.5rem; }
+    }
+
+    .mobile-notice {
+      display: none;
+    }
+
+    /* Reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Loading screen while Three.js scene initializes -->
+  <div id="loading-overlay" class="loading-overlay" role="status" aria-live="polite" aria-label="Loading 3D scene">
+    <img
+      src="assets/sdv-sensor-suite-logo.png"
+      alt="SDV Sensor Suite"
+      class="loading-overlay__logo"
+      width="220"
+      height="72"
+    />
+    <div class="loading-overlay__spinner" aria-hidden="true"></div>
+    <p class="loading-overlay__text">Initializing sensor layout…</p>
+    <div class="loading-overlay__progress" aria-hidden="true">
+      <div id="loading-bar" class="loading-overlay__bar"></div>
+    </div>
+  </div>
+
+  <header class="app-header">
+    <a href="#" class="app-header__brand" aria-label="SDV Sensor Suite home">
+      <img
+        src="assets/sdv-sensor-suite-logo.png"
+        alt=""
+        class="app-header__logo"
+        width="168"
+        height="44"
+        decoding="async"
+      />
+      <h1 class="app-header__title">SDV Sensor Suite</h1>
+    </a>
+    <ul class="app-header__nav" role="tablist">
+      <li><a href="#" class="is-active" role="tab">Overview</a></li>
+      <li><a href="#" role="tab">Sensors</a></li>
+      <li><a href="#" role="tab">Architecture</a></li>
+      <li><a href="#" role="tab">About</a></li>
+    </ul>
+    <div class="app-header__actions">
+      <div class="theme-switch">
+        <span>Dark</span>
+        <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Switch to light mode"></button>
+        <span>Light</span>
+      </div>
+    </div>
+  </header>
+
+  <aside class="sidebar-left" aria-label="Controls">
+    <nav id="sensor-legend" class="sensor-legend glass-panel" aria-label="Sensor legend">
+      <h2 class="sensor-legend__title panel-block__title">Sensor Legend</h2>
+      <ul id="legend-list" class="sensor-legend__list"></ul>
+    </nav>
+    <div class="view-controls glass-panel">
+      <h2 class="panel-block__title">View Controls</h2>
+      <button type="button" class="view-controls__btn" id="btn-rotate">↻ Rotate</button>
+      <button type="button" class="view-controls__btn" id="btn-zoom-in">＋ Zoom</button>
+      <button type="button" class="view-controls__btn" id="btn-zoom-out">－ Zoom</button>
+      <button type="button" class="view-controls__btn" id="btn-pan">✥ Pan</button>
+      <button type="button" class="view-controls__btn" id="btn-reset-view">⌂ Reset View</button>
+    </div>
+    <div class="display-toggles glass-panel">
+      <h2 class="panel-block__title">Display</h2>
+      <label class="toggle-row"><span>Sensor Range</span><button type="button" class="toggle-pill is-on" data-toggle="range" aria-pressed="true"></button></label>
+      <label class="toggle-row"><span>Sensor Labels</span><button type="button" class="toggle-pill is-on" data-toggle="labels" aria-pressed="true"></button></label>
+      <label class="toggle-row"><span>Grid</span><button type="button" class="toggle-pill is-on" data-toggle="grid" aria-pressed="true"></button></label>
+      <label class="toggle-row"><span>Animations</span><button type="button" class="toggle-pill is-on" data-toggle="animations" aria-pressed="true"></button></label>
+    </div>
+  </aside>
+
+  <main class="app-main">
+    <div id="canvas-container" aria-label="3D vehicle sensor visualization">
+      <div class="grid-fade" aria-hidden="true"></div>
+      <div class="canvas-vignette" aria-hidden="true"></div>
+    </div>
+  </main>
+
+  <footer class="view-bar glass-panel">
+    <span class="view-bar__label">Select View</span>
+    <div class="view-bar__views" id="view-thumbs">
+      <button type="button" class="view-thumb is-active" data-view="3d"><span class="view-thumb__icon">◇</span>3D View</button>
+      <button type="button" class="view-thumb" data-view="top"><span class="view-thumb__icon">▣</span>Top</button>
+      <button type="button" class="view-thumb" data-view="front"><span class="view-thumb__icon">▲</span>Front</button>
+      <button type="button" class="view-thumb" data-view="side"><span class="view-thumb__icon">▶</span>Side</button>
+      <button type="button" class="view-thumb" data-view="rear"><span class="view-thumb__icon">▼</span>Rear</button>
+    </div>
+  </footer>
+
+  <div class="compass glass-panel" aria-hidden="true">
+    <div class="compass__ring"></div>
+    <span class="compass__n">N</span>
+    <span class="compass__e" style="position:absolute;right:6px;">E</span>
+    <span class="compass__s" style="position:absolute;bottom:4px;">S</span>
+    <span class="compass__w" style="position:absolute;left:6px;">W</span>
+  </div>
+
+  <!-- Right details panel — always visible like mockup -->
+  <aside id="info-panel" class="info-panel glass-panel is-drawer-open" aria-labelledby="panel-name">
+    <button type="button" id="panel-close" class="info-panel__close" aria-label="Close selection" hidden>&times;</button>
+    <div id="panel-hardware" class="info-panel__hardware">
+      <span id="panel-hardware-icon" class="info-panel__hardware-icon" aria-hidden="true">◎</span>
+    </div>
+    <span id="panel-type" class="info-panel__type-badge"></span>
+    <h2 id="panel-name" class="info-panel__name"></h2>
+    <dl id="panel-specs" class="spec-grid"></dl>
+
+    <section class="info-panel__section">
+      <h3 class="info-panel__section-title">About</h3>
+      <p id="panel-detail" class="info-panel__body"></p>
+    </section>
+
+    <section class="info-panel__section">
+      <h3 class="info-panel__section-title">SDV Use Case</h3>
+      <p id="panel-sdv" class="info-panel__body"></p>
+    </section>
+
+    <section class="info-panel__section">
+      <h3 class="info-panel__section-title">Commonly Used In</h3>
+      <div id="panel-companies" class="info-panel__logos"></div>
+    </section>
+  </aside>
+
+  <script type="module">
+    /**
+     * SDV Sensor Explorer — Main Application Module
+     * Three.js scene + raycasting + UI synchronization
+     */
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+    import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+    import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+    import { CSS2DRenderer, CSS2DObject } from "three/addons/renderers/CSS2DRenderer.js";
+    import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+    import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+    import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+
+    // =========================================================================
+    // Sensor catalog — single source of truth for UI + 3D placement
+    // =========================================================================
+    const SENSORS = [
+      {
+        id: "lidar-roof",
+        name: "Roof-Mounted LiDAR",
+        type: "LiDAR",
+        manufacturer: "Velodyne / Hesai (OEM integrations)",
+        usage: "360° high-resolution 3D point cloud for mapping and object detection.",
+        range: "Up to ~200 m (class-dependent)",
+        position_in_vehicle: "Roof center — elevated for unobstructed FOV",
+        color: 0x4da6ff,
+        position: [0, 1.05, 0.15],
+        scale: [0.35, 0.22, 0.35],
+        geometry: "cylinder",
+        detail:
+          "Spinning or solid-state LiDAR generates dense 3D point clouds used for SLAM, lane geometry, and dynamic object tracking. In SDV architectures it feeds perception fusion pipelines alongside cameras and radar.",
+        sdv_use:
+          "Enables L3+ highway pilot and urban ADAS by providing centimeter-level geometry for occupancy grids and neural network pre-processing in the vehicle's perception ECU.",
+        companies: ["Velodyne", "Hesai", "Luminar", "Innoviz", "Valeo"]
+      },
+      {
+        id: "radar-front",
+        name: "Front Long-Range Radar",
+        type: "Radar",
+        manufacturer: "Continental ARS / Bosch FR5",
+        usage: "ACC, AEB, and forward collision warning with velocity measurement.",
+        range: "~250 m (77 GHz automotive radar)",
+        position_in_vehicle: "Front grille / bumper center",
+        color: 0x4ade80,
+        position: [0, 0.35, 1.85],
+        scale: [0.5, 0.25, 0.12],
+        geometry: "box",
+        detail:
+          "77 GHz FMCW radar measures range, azimuth, and Doppler velocity of targets. Robust in rain, fog, and low light where cameras degrade — ideal for safety-critical longitudinal control.",
+        sdv_use:
+          "Primary sensor for adaptive cruise control and automatic emergency braking; data published on automotive Ethernet to domain controllers for real-time fusion.",
+        companies: ["Continental", "Bosch", "Denso", "Hella", "Aptiv"]
+      },
+      {
+        id: "radar-corner",
+        name: "Corner Short-Range Radar",
+        type: "Radar",
+        manufacturer: "Bosch Mid-Range / Continental SRR",
+        usage: "Blind-spot monitoring, cross-traffic alert, lane-change assist.",
+        range: "~90 m",
+        position_in_vehicle: "Rear corners (left / right)",
+        color: 0x4ade80,
+        position: [-0.95, 0.4, -1.6],
+        scale: [0.28, 0.2, 0.1],
+        geometry: "box",
+        detail:
+          "Short-range radar modules cover rear-quarter and side zones. Multiple units create a surround view for parking and highway lane-change safety.",
+        sdv_use:
+          "Supports blind-spot detection and rear cross-traffic braking; OTA-updatable detection zones via SDV software-defined perception configs.",
+        companies: ["Bosch", "Continental", "Valeo", "Magna"]
+      },
+      {
+        id: "ultrasonic-front",
+        name: "Front Ultrasonic Array",
+        type: "Ultrasonic",
+        manufacturer: "Bosch / Valeo USS",
+        usage: "Low-speed parking, curb detection, and garage maneuvering.",
+        range: "~0.2 – 5 m",
+        position_in_vehicle: "Front bumper (4–6 sensors)",
+        color: 0xfacc15,
+        position: [0.55, 0.2, 1.92],
+        scale: [0.12, 0.12, 0.08],
+        geometry: "sphere",
+        detail:
+          "Piezoelectric transducers emit ultrasonic pulses and measure echo time-of-flight. Cost-effective for centimeter-level ranging at parking speeds.",
+        sdv_use:
+          "Feeds automated parking and remote park-assist; integrated with surround-view cameras in SDV parking domain controllers.",
+        companies: ["Bosch", "Valeo", "Murata", "Hyundai Mobis"]
+      },
+      {
+        id: "ultrasonic-rear",
+        name: "Rear Ultrasonic Array",
+        type: "Ultrasonic",
+        manufacturer: "Bosch / Valeo USS",
+        usage: "Reverse parking aid and obstacle warning near rear bumper.",
+        range: "~0.2 – 5 m",
+        position_in_vehicle: "Rear bumper",
+        color: 0xfacc15,
+        position: [-0.55, 0.2, -1.92],
+        scale: [0.12, 0.12, 0.08],
+        geometry: "sphere",
+        detail:
+          "Symmetric rear array mirrors front USS layout. Often combined with rear camera overlay guidelines in HMI.",
+        sdv_use:
+          "Enables rear automatic emergency braking at low speed and trailer hitch alignment features in connected SDV platforms.",
+        companies: ["Bosch", "Valeo", "Continental", "Denso"]
+      },
+      {
+        id: "camera-front",
+        name: "Front Wide Camera",
+        type: "Camera",
+        manufacturer: "Mobileye / Sony IMX automotive",
+        usage: "Lane keeping, traffic sign recognition, and forward scene semantics.",
+        range: "Visual — effective ~150 m+ (8 MP class)",
+        position_in_vehicle: "Windshield upper center (mirror housing)",
+        color: 0xc084fc,
+        position: [0, 0.72, 0.95],
+        scale: [0.18, 0.1, 0.14],
+        geometry: "box",
+        detail:
+          "High dynamic range CMOS sensor with wide FOV lens. On-chip or ECU ISP handles debayering, tone mapping, and compression before neural network inference.",
+        sdv_use:
+          "Core input for lane departure warning and traffic sign recognition; video streams routed via GMSL2/FPD-Link to centralized ADAS SoC in zonal SDV E/E.",
+        companies: ["Mobileye", "Sony", "ON Semi", "Ambarella", "Continental"]
+      },
+      {
+        id: "camera-side",
+        name: "Side Surround Camera",
+        type: "Camera",
+        manufacturer: "Valeo / Magna surround modules",
+        usage: "360° surround view, lane-change support, and parking visualization.",
+        range: "Visual — ~30–80 m effective",
+        position_in_vehicle: "Side mirror / fender (driver side)",
+        color: 0xc084fc,
+        position: [-1.05, 0.55, 0.2],
+        scale: [0.14, 0.09, 0.1],
+        geometry: "box",
+        detail:
+          "Fisheye or medium FOV cameras on each corner enable stitched bird's-eye view. Calibrated extrinsics stored in vehicle NVM and refined OTA.",
+        sdv_use:
+          "Powers digital mirror replacement and automated valet parking; calibration updates delivered OTA in software-defined architectures.",
+        companies: ["Valeo", "Magna", "Aptiv", "Bosch", "Continental"]
+      },
+      {
+        id: "camera-rear",
+        name: "Rear View Camera",
+        type: "Camera",
+        manufacturer: "Panasonic / Sony automotive",
+        usage: "Reverse camera display and rear cross-traffic visual confirmation.",
+        range: "Visual — ~10–30 m typical",
+        position_in_vehicle: "Liftgate / trunk handle area",
+        color: 0xc084fc,
+        position: [0, 0.5, -1.75],
+        scale: [0.16, 0.1, 0.08],
+        geometry: "box",
+        detail:
+          "Required for regulatory rear visibility in many markets. Often paired with ultrasonic overlay for parking HMI.",
+        sdv_use:
+          "Mandatory RVC feed; in SDV stacks, also used for rear pedestrian detection when fused with radar in perception middleware.",
+        companies: ["Panasonic", "Sony", "Valeo", "Bosch"]
+      },
+      {
+        id: "imu-chassis",
+        name: "6-Axis IMU (Chassis)",
+        type: "IMU",
+        manufacturer: "Bosch SMI / STMicro ASM",
+        usage: "Ego-motion estimation, ESP integration, and sensor fusion aiding.",
+        range: "N/A — inertial (±16 g, ±2000 °/s class)",
+        position_in_vehicle: "Center floor / ECU cluster near CG",
+        color: 0xfb923c,
+        position: [0, 0.15, 0],
+        scale: [0.2, 0.08, 0.25],
+        geometry: "box",
+        detail:
+          "MEMS accelerometer + gyroscope measure linear acceleration and angular rate. Critical for dead reckoning when GNSS is degraded (tunnels, urban canyons).",
+        sdv_use:
+          "Feeds localization, stability control, and V2X trajectory broadcast; high-rate data synchronized via PTP on automotive Ethernet in SDV gateways.",
+        companies: ["Bosch", "STMicroelectronics", "TDK InvenSense", "Murata", "ADI"]
+      }
+    ];
+
+    // Type → legend swatch color (refined EQ palette)
+    const TYPE_COLORS = {
+      LiDAR: "#4da6ff",
+      Radar: "#4ade80",
+      Ultrasonic: "#facc15",
+      Camera: "#c084fc",
+      IMU: "#fb923c"
+    };
+
+    const CAMERA_VIEWS = {
+      "3d": { pos: [5.5, 3.2, 5.5], target: [0, 0.5, 0] },
+      top: { pos: [0.01, 9, 0], target: [0, 0, 0] },
+      front: { pos: [0, 1.4, 7.5], target: [0, 0.45, 0] },
+      side: { pos: [7.5, 1.6, 0], target: [0, 0.45, 0] },
+      rear: { pos: [0, 1.4, -7.5], target: [0, 0.45, 0] }
+    };
+
+    const SENSOR_TYPES = ["LiDAR", "Radar", "Camera", "Ultrasonic", "IMU"];
+    const SENSOR_TYPE_LABELS = { IMU: "IMU / INS" };
+
+    // Per-sensor 3D label anchor offsets (prevents roof/front cluster overlap)
+    const LABEL_OFFSETS = {
+      "lidar-roof": [0, 0.55, 0],
+      "radar-front": [0, 0.32, 0.22],
+      "radar-corner": [-0.7, 0.38, -0.12],
+      "ultrasonic-front": [0.72, 0.26, 0.12],
+      "ultrasonic-rear": [-0.72, 0.26, -0.12],
+      "camera-front": [-0.58, 0.38, 0.08],
+      "camera-side": [-1.2, 0.45, 0.05],
+      "camera-rear": [0.55, 0.42, -0.08],
+      "imu-chassis": [0.42, 0.22, 0.18]
+    };
+
+    const LABEL_NAMES = {
+      "lidar-roof": "LiDAR",
+      "radar-front": "Front Radar",
+      "radar-corner": "Rear Radar",
+      "ultrasonic-front": "Front USS",
+      "ultrasonic-rear": "Rear USS",
+      "camera-front": "Front Camera",
+      "camera-side": "Side Camera",
+      "camera-rear": "Rear Camera",
+      "imu-chassis": "IMU"
+    };
+
+    const TYPE_ICONS = { LiDAR: "◎", Radar: "◈", Ultrasonic: "●", Camera: "▣", IMU: "◆" };
+
+    // =========================================================================
+    // DOM references
+    // =========================================================================
+    const container = document.getElementById("canvas-container");
+    const loadingOverlay = document.getElementById("loading-overlay");
+    const loadingBar = document.getElementById("loading-bar");
+    const infoPanel = document.getElementById("info-panel");
+    const panelSpecs = document.getElementById("panel-specs");
+    const panelClose = document.getElementById("panel-close");
+    const legendList = document.getElementById("legend-list");
+    const themeToggle = document.getElementById("theme-toggle");
+    let hemiLight = null;
+
+    // =========================================================================
+    // Application state
+    // =========================================================================
+    let scene, camera, renderer, controls, raycaster, mouse;
+    let sensorMeshes = []; // mesh, glow, glowLight, highlight state
+    let hoveredMesh = null;
+    let selectedId = null;
+    let particleSystem = null;
+    let sceneGrid = null;
+    let sceneFloor = null;
+    let lightStrips = [];
+    let rangeRings = null;
+    let labelRenderer = null;
+    let composer = null;
+    let bloomPass = null;
+    let currentTheme = "dark";
+    const displaySettings = { range: true, labels: true, grid: true, animations: true };
+    const clock = new THREE.Clock();
+    const LERP_SPEED = 4.5;
+
+    const SCENE_THEMES = {
+      dark: {
+        bg: 0x0b0e14,
+        fog: 0x0b0e14,
+        gridCenter: 0x7ec8ff,
+        gridLine: 0x152030,
+        gridOpacity: 0.48,
+        floor: 0x080a0e,
+        floorMetal: 0.85,
+        particle: 0x7ec8ff,
+        particleOpacity: 0.18,
+        hemSky: 0x8eb4d4,
+        hemGround: 0x0b0e14
+      },
+      light: {
+        bg: 0xe8ecf2,
+        fog: 0xe8ecf2,
+        gridCenter: 0x3b82c4,
+        gridLine: 0xb8c5d4,
+        gridOpacity: 0.55,
+        floor: 0xdce2ea,
+        floorMetal: 0.35,
+        particle: 0x5a9fd4,
+        particleOpacity: 0.14,
+        hemSky: 0xd0e4f8,
+        hemGround: 0xc8d0dc
+      }
+    };
+
+    // =========================================================================
+    // Loading progress helper
+    // =========================================================================
+    function setLoadProgress(pct) {
+      loadingBar.style.width = `${Math.min(100, pct)}%`;
+    }
+
+    // =========================================================================
+    // Futuristic SDV concept car — rounded volumes + emissive light strips
+    // =========================================================================
+    function createVehicle() {
+      lightStrips.length = 0;
+      const vehicle = new THREE.Group();
+      vehicle.name = "vehicle";
+
+      const bodyMat = new THREE.MeshStandardMaterial({
+        color: 0x0a0a0c,
+        metalness: 0.88,
+        roughness: 0.22,
+        envMapIntensity: 0.55
+      });
+
+      const cabinMat = new THREE.MeshStandardMaterial({
+        color: 0x181c24,
+        metalness: 0.8,
+        roughness: 0.3,
+        envMapIntensity: 0.42
+      });
+
+      const glassMat = new THREE.MeshPhysicalMaterial({
+        color: 0x2a3544,
+        metalness: 0.05,
+        roughness: 0.08,
+        transmission: 0.55,
+        transparent: true,
+        opacity: 0.88,
+        envMapIntensity: 0.3
+      });
+
+      const addRounded = (w, h, d, r, mat, x, y, z, rotX = 0) => {
+        const geo = new RoundedBoxGeometry(w, h, d, 6, r);
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(x, y, z);
+        mesh.rotation.x = rotX;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        vehicle.add(mesh);
+        return mesh;
+      };
+
+      addRounded(2, 0.48, 4.2, 0.14, bodyMat, 0, 0.36, 0);
+      addRounded(1.72, 0.62, 2.15, 0.12, cabinMat, 0, 0.9, -0.12);
+      addRounded(1.55, 0.42, 0.1, 0.03, glassMat, 0, 0.98, 1.02, -0.32);
+
+      const addLightStrip = (w, h, d, color, x, y, z) => {
+        const mat = new THREE.MeshStandardMaterial({
+          color,
+          emissive: new THREE.Color(color),
+          emissiveIntensity: 0.85,
+          metalness: 0.15,
+          roughness: 0.35,
+          toneMapped: false
+        });
+        const strip = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 2, 0.02), mat);
+        strip.position.set(x, y, z);
+        vehicle.add(strip);
+        lightStrips.push(strip);
+        return strip;
+      };
+
+      addLightStrip(1.85, 0.04, 0.05, 0xffffff, 0, 0.44, 2.1);
+      addLightStrip(1.6, 0.04, 0.05, 0xff3355, 0, 0.42, -2.1);
+
+      const skirtMat = new THREE.MeshStandardMaterial({
+        color: 0x1a2030,
+        emissive: 0x223344,
+        emissiveIntensity: 0.15,
+        metalness: 0.7,
+        roughness: 0.4
+      });
+      addRounded(2.05, 0.06, 4.25, 0.02, skirtMat, 0, 0.14, 0);
+
+      const wheelGeo = new THREE.CylinderGeometry(0.36, 0.36, 0.18, 20);
+      wheelGeo.rotateZ(Math.PI / 2);
+      const wheelMat = new THREE.MeshStandardMaterial({
+        color: 0x080a0e,
+        metalness: 0.5,
+        roughness: 0.55,
+        envMapIntensity: 0.25
+      });
+
+      [[-0.92, 0.38, 1.32], [0.92, 0.38, 1.32], [-0.92, 0.38, -1.32], [0.92, 0.38, -1.32]].forEach(([x, y, z]) => {
+        const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+        wheel.position.set(x, y, z);
+        wheel.castShadow = true;
+        vehicle.add(wheel);
+      });
+
+      return vehicle;
+    }
+
+    function createRangeRings() {
+      const group = new THREE.Group();
+      group.name = "range-rings";
+      const colors = [0x4ade80, 0x4da6ff, 0x4ae0c8];
+      [2.8, 4.5, 6.2].forEach((r, i) => {
+        const ring = new THREE.Mesh(
+          new THREE.RingGeometry(r - 0.04, r, 80),
+          new THREE.MeshBasicMaterial({
+            color: colors[i],
+            transparent: true,
+            opacity: 0.16 - i * 0.04,
+            side: THREE.DoubleSide,
+            depthWrite: false
+          })
+        );
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = 0.03;
+        group.add(ring);
+      });
+      return group;
+    }
+
+    function createSensorHoverCard(data) {
+      const el = document.createElement("div");
+      el.className = "sensor-hover-card";
+      el.innerHTML = `
+        <div class="sensor-hover-card__head">
+          <span class="sensor-hover-card__title"></span>
+          <button type="button" class="sensor-hover-card__close" aria-label="Close">×</button>
+        </div>
+        <p class="sensor-hover-card__row"><strong>Manufacturer:</strong> <span data-f="mfr"></span></p>
+        <p class="sensor-hover-card__row"><strong>Range:</strong> <span data-f="range"></span></p>
+      `;
+      el.querySelector(".sensor-hover-card__close").addEventListener("click", (e) => {
+        e.stopPropagation();
+        hideAllHoverCards();
+        hoveredMesh = null;
+        clearAllHighlights();
+      });
+      const card = new CSS2DObject(el);
+      card.position.set(0.5, 0.4, 0);
+      card.visible = false;
+      return { card, el };
+    }
+
+    function createSensorLabel(data) {
+      const el = document.createElement("div");
+      el.className = "sensor-label-3d";
+      el.textContent = LABEL_NAMES[data.id] || data.name;
+      const color = TYPE_COLORS[data.type] || "#fff";
+      el.style.borderColor = color;
+      el.style.color = color;
+      const label = new CSS2DObject(el);
+      const off = LABEL_OFFSETS[data.id] || [0, 0.28, 0];
+      label.position.set(off[0], off[1], off[2]);
+      label.center.set(0.5, 1);
+      label.userData.screenOx = 0;
+      label.userData.screenOy = 0;
+      return label;
+    }
+
+    /** Push apart labels that project to the same screen area */
+    function resolveLabelOverlaps() {
+      if (!displaySettings.labels) return;
+
+      const items = sensorMeshes.filter((e) => e.label?.visible && e.label.element);
+
+      items.forEach((e) => {
+        e.label.userData.screenOx = 0;
+        e.label.userData.screenOy = 0;
+        applyLabelScreenOffset(e.label);
+      });
+
+      const pad = 5;
+      const push = 7;
+
+      for (let iter = 0; iter < 14; iter++) {
+        let moved = false;
+        for (let i = 0; i < items.length; i++) {
+          for (let j = i + 1; j < items.length; j++) {
+            const a = items[i].label.element.getBoundingClientRect();
+            const b = items[j].label.element.getBoundingClientRect();
+            if (
+              a.right + pad < b.left ||
+              b.right + pad < a.left ||
+              a.bottom + pad < b.top ||
+              b.bottom + pad < a.top
+            ) {
+              continue;
+            }
+
+            const acx = a.left + a.width / 2;
+            const acy = a.top + a.height / 2;
+            const bcx = b.left + b.width / 2;
+            const bcy = b.top + b.height / 2;
+            let dx = acx - bcx;
+            let dy = acy - bcy;
+            if (Math.abs(dx) < 2 && Math.abs(dy) < 2) {
+              dx = (i % 2 === 0 ? 1 : -1) * 12;
+              dy = -10 - i * 4;
+            }
+            const len = Math.hypot(dx, dy) || 1;
+            items[i].label.userData.screenOx += (dx / len) * push;
+            items[i].label.userData.screenOy += (dy / len) * push;
+            items[j].label.userData.screenOx -= (dx / len) * push;
+            items[j].label.userData.screenOy -= (dy / len) * push;
+            moved = true;
+          }
+        }
+        if (!moved) break;
+        items.forEach((e) => applyLabelScreenOffset(e.label));
+      }
+    }
+
+    function applyLabelScreenOffset(label) {
+      const ox = label.userData.screenOx || 0;
+      const oy = label.userData.screenOy || 0;
+      label.element.style.transform =
+        `translate(calc(-50% + ${ox}px), calc(-100% - 4px + ${oy}px))`;
+    }
+
+    function updateLabelHighlights() {
+      sensorMeshes.forEach((entry) => {
+        if (!entry.label?.element) return;
+        const on =
+          entry.data.id === selectedId ||
+          (hoveredMesh && entry.data.id === hoveredMesh.data.id);
+        entry.label.element.classList.toggle("is-highlighted", on);
+      });
+    }
+
+    function createSceneGrid(theme) {
+      const t = SCENE_THEMES[theme];
+      const grid = new THREE.GridHelper(16, 32, t.gridCenter, t.gridLine);
+      grid.position.y = 0.02;
+      grid.material.transparent = true;
+      grid.material.opacity = t.gridOpacity;
+      return grid;
+    }
+
+    function createShowroomFloor(theme) {
+      const t = SCENE_THEMES[theme];
+      const floor = new THREE.Mesh(
+        new THREE.PlaneGeometry(24, 24),
+        new THREE.MeshPhysicalMaterial({
+          color: t.floor,
+          metalness: t.floorMetal,
+          roughness: theme === "dark" ? 0.22 : 0.45,
+          envMapIntensity: theme === "dark" ? 0.4 : 0.2,
+          clearcoat: theme === "dark" ? 0.35 : 0.1,
+          clearcoatRoughness: 0.35
+        })
+      );
+      floor.rotation.x = -Math.PI / 2;
+      floor.position.y = 0;
+      floor.receiveShadow = true;
+      return floor;
+    }
+
+    function applySceneTheme(theme) {
+      const t = SCENE_THEMES[theme];
+      currentTheme = theme;
+      document.documentElement.setAttribute("data-theme", theme);
+
+      scene.background.setHex(t.bg);
+      scene.fog.color.setHex(t.fog);
+
+      if (sceneGrid) {
+        scene.remove(sceneGrid);
+        sceneGrid.geometry.dispose();
+        sceneGrid.material.dispose();
+      }
+      sceneGrid = createSceneGrid(theme);
+      scene.add(sceneGrid);
+
+      if (sceneFloor) {
+        sceneFloor.material.color.setHex(t.floor);
+        sceneFloor.material.metalness = t.floorMetal;
+        sceneFloor.material.envMapIntensity = theme === "dark" ? 0.4 : 0.2;
+      }
+
+      if (particleSystem) {
+        particleSystem.material.color.setHex(t.particle);
+        particleSystem.material.opacity = t.particleOpacity;
+      }
+
+      if (hemiLight) {
+        hemiLight.color.setHex(t.hemSky);
+        hemiLight.groundColor.setHex(t.hemGround);
+      }
+
+      const btn = document.getElementById("theme-toggle");
+      if (btn) {
+        const isDark = theme === "dark";
+        btn.setAttribute("aria-label", isDark ? "Switch to light mode" : "Switch to dark mode");
+      }
+      document.querySelector(".grid-fade")?.style.setProperty(
+        "background",
+        theme === "dark"
+          ? "radial-gradient(ellipse 70% 55% at 50% 50%, transparent 25%, rgba(11, 14, 20, 0.65) 100%)"
+          : "radial-gradient(ellipse 70% 55% at 50% 50%, transparent 30%, rgba(232, 236, 242, 0.5) 100%)"
+      );
+    }
+
+    function setCameraView(viewId) {
+      const v = CAMERA_VIEWS[viewId] || CAMERA_VIEWS["3d"];
+      animateCameraTo(
+        new THREE.Vector3(...v.pos),
+        new THREE.Vector3(...v.target)
+      );
+      document.querySelectorAll(".view-thumb").forEach((el) => {
+        el.classList.toggle("is-active", el.dataset.view === viewId);
+      });
+    }
+
+    function applyDisplaySettings() {
+      if (rangeRings) rangeRings.visible = displaySettings.range;
+      if (sceneGrid) sceneGrid.visible = displaySettings.grid;
+      sensorMeshes.forEach((e) => {
+        if (e.label) e.label.visible = displaySettings.labels;
+      });
+    }
+
+    // =========================================================================
+    // Create sensor mesh from catalog entry
+    // =========================================================================
+    function createSensorMesh(data) {
+      const geometry = new THREE.SphereGeometry(1, 20, 20);
+      const emissive = new THREE.Color(data.color);
+      const material = new THREE.MeshStandardMaterial({
+        color: data.color,
+        emissive,
+        emissiveIntensity: 0.55,
+        metalness: 0.2,
+        roughness: 0.35,
+        toneMapped: false
+      });
+
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.scale.set(...data.scale);
+      mesh.position.set(...data.position); // UPDATED — positions relative to vehicle group
+      mesh.userData.sensorId = data.id;
+      mesh.castShadow = true;
+
+      const glowScale = data.scale.map((s) => s * 1.85);
+      const glowGeo = new THREE.SphereGeometry(0.55, 16, 16);
+      const glowMat = new THREE.MeshBasicMaterial({
+        color: data.color,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      });
+      const glowMesh = new THREE.Mesh(glowGeo, glowMat);
+      glowMesh.scale.set(...glowScale);
+      glowMesh.position.copy(mesh.position);
+      glowMesh.raycast = () => {};
+
+      const glowLight = new THREE.PointLight(data.color, 0, 2.5);
+      glowLight.position.copy(mesh.position);
+      glowLight.decay = 2;
+
+      const hitScale = data.scale.map((s) => s * 1.4);
+      const hitMesh = new THREE.Mesh(geometry.clone(), new THREE.MeshBasicMaterial({ visible: false }));
+      hitMesh.scale.set(...hitScale);
+      hitMesh.userData.sensorId = data.id;
+
+      const label = createSensorLabel(data);
+      const hover = createSensorHoverCard(data);
+      const group = new THREE.Group();
+      group.add(glowMesh);
+      group.add(mesh);
+      group.add(glowLight);
+      group.add(hitMesh);
+      group.add(label);
+      group.add(hover.card);
+      group.userData.sensorId = data.id;
+
+      return {
+        group,
+        mesh,
+        glowMesh,
+        glowLight,
+        hitMesh,
+        label,
+        hoverCard: hover,
+        data,
+        baseEmissive: emissive.clone(),
+        baseIntensity: 0.45,
+        glow: { opacity: 0, targetOpacity: 0 },
+        light: { intensity: 0, targetIntensity: 0 },
+        emissive: { intensity: 0.45, targetIntensity: 0.45 }
+      };
+    }
+
+    // =========================================================================
+    // Particle background (bonus) — subtle ambient depth
+    // =========================================================================
+    function createParticles() {
+      const count = 380;
+      const positions = new Float32Array(count * 3);
+
+      for (let i = 0; i < count; i++) {
+        positions[i * 3] = (Math.random() - 0.5) * 18;
+        positions[i * 3 + 1] = Math.random() * 6 + 0.5;
+        positions[i * 3 + 2] = (Math.random() - 0.5) * 18;
+      }
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+
+      return new THREE.Points(
+        geo,
+        new THREE.PointsMaterial({
+          color: 0x7ec8ff,
+          size: 0.025,
+          transparent: true,
+          opacity: 0.18,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending
+        })
+      );
+    }
+
+    // =========================================================================
+    // Highlight targets — smoothed in animate() via lerp
+    // =========================================================================
+    function setHighlightTargets(entry, state) {
+      // state: 'idle' | 'hover' | 'locked'
+      const targets = {
+        idle: { emissive: 0.45, glow: 0.12, light: 0.15 },
+        hover: { emissive: 1.1, glow: 0.5, light: 0.65 },
+        locked: { emissive: 1.4, glow: 0.65, light: 0.85 }
+      };
+      const t = targets[state] || targets.idle;
+      entry.emissive.targetIntensity = t.emissive;
+      entry.glow.targetOpacity = t.glow;
+      entry.light.targetIntensity = t.light;
+
+      if (state !== "idle") {
+        entry.mesh.material.emissive.copy(entry.baseEmissive).multiplyScalar(1.4);
+      }
+    }
+
+    function clearAllHighlights(exceptId = null) {
+      sensorMeshes.forEach((entry) => {
+        if (entry.data.id === exceptId) {
+          setHighlightTargets(entry, "locked");
+        } else {
+          setHighlightTargets(entry, "idle");
+        }
+      });
+    }
+
+    function updateHighlightLerp(delta) {
+      const k = 1 - Math.exp(-LERP_SPEED * delta);
+
+      sensorMeshes.forEach((entry) => {
+        entry.emissive.intensity += (entry.emissive.targetIntensity - entry.emissive.intensity) * k;
+        entry.glow.opacity += (entry.glow.targetOpacity - entry.glow.opacity) * k;
+        entry.light.intensity += (entry.light.targetIntensity - entry.light.intensity) * k;
+
+        entry.mesh.material.emissiveIntensity = entry.emissive.intensity;
+        entry.glowMesh.material.opacity = entry.glow.opacity;
+        entry.glowLight.intensity = entry.light.intensity;
+
+        if (entry.data.id === selectedId) {
+          const pulse = 0.08 * Math.sin(clock.elapsedTime * 2.2);
+          entry.glowMesh.material.opacity = entry.glow.opacity + pulse;
+          entry.emissive.intensity = entry.emissive.targetIntensity + pulse * 0.5;
+        }
+      });
+    }
+
+    function hideAllHoverCards() {
+      sensorMeshes.forEach((e) => {
+        if (e.hoverCard) e.hoverCard.card.visible = false;
+      });
+    }
+
+    function showHoverCard(entry) {
+      hideAllHoverCards();
+      const { el, card } = entry.hoverCard;
+      const d = entry.data;
+      el.querySelector(".sensor-hover-card__title").textContent = d.name;
+      el.querySelector("[data-f='mfr']").textContent = d.manufacturer.split("/")[0].trim();
+      el.querySelector("[data-f='range']").textContent = d.range;
+      el.style.borderColor = TYPE_COLORS[d.type];
+      card.visible = true;
+      el.classList.add("is-visible");
+    }
+
+    // =========================================================================
+    // UI — Side info panel
+    // =========================================================================
+    function openInfoPanel(data) {
+      const color = TYPE_COLORS[data.type] || "#7ec8ff";
+      const badge = document.getElementById("panel-type");
+      badge.textContent = data.type;
+      badge.style.background = `${color}22`;
+      badge.style.color = color;
+      document.getElementById("panel-name").textContent = data.name;
+      document.getElementById("panel-hardware-icon").textContent = TYPE_ICONS[data.type] || "◎";
+      document.getElementById("panel-hardware").style.boxShadow = `inset 0 0 40px ${color}33`;
+
+      panelSpecs.innerHTML = `
+        <dt>Manufacturer</dt><dd>${data.manufacturer.split("/")[0].trim()}</dd>
+        <dt>Model</dt><dd>${data.name}</dd>
+        <dt>Type</dt><dd>${data.type}</dd>
+        <dt>Usage</dt><dd>${data.usage.slice(0, 48)}…</dd>
+        <dt>Range</dt><dd>${data.range}</dd>
+        <dt>Position</dt><dd>${data.position_in_vehicle.slice(0, 40)}…</dd>
+      `;
+      document.getElementById("panel-detail").textContent = data.detail;
+      document.getElementById("panel-sdv").textContent = data.sdv_use;
+
+      const companiesEl = document.getElementById("panel-companies");
+      companiesEl.innerHTML = "";
+      data.companies.slice(0, 5).forEach((c) => {
+        const chip = document.createElement("span");
+        chip.className = "info-panel__logo-chip";
+        chip.textContent = c;
+        companiesEl.appendChild(chip);
+      });
+
+      selectedId = data.id;
+      infoPanel.classList.add("is-drawer-open");
+      updateLegendActive(data.id);
+      updateLabelHighlights();
+    }
+
+    function closeInfoPanel() {
+      selectedId = null;
+      clearAllHighlights();
+      hideAllHoverCards();
+      updateLegendActive(null);
+      updateLabelHighlights();
+      openInfoPanel(SENSORS[0]);
+    }
+
+    // =========================================================================
+    // UI — Legend (bonus)
+    // =========================================================================
+    function buildLegend() {
+      const counts = {};
+      SENSORS.forEach((s) => { counts[s.type] = (counts[s.type] || 0) + 1; });
+      legendList.innerHTML = "";
+      SENSOR_TYPES.forEach((type) => {
+        const li = document.createElement("li");
+        li.className = "sensor-legend__item";
+        li.dataset.sensorType = type;
+        li.setAttribute("role", "button");
+        li.setAttribute("tabindex", "0");
+
+        const left = document.createElement("div");
+        left.className = "sensor-legend__item-left";
+        const swatch = document.createElement("span");
+        swatch.className = "sensor-legend__swatch";
+        swatch.style.background = TYPE_COLORS[type];
+        swatch.style.color = TYPE_COLORS[type];
+        const label = document.createElement("span");
+        label.className = "sensor-legend__label";
+        label.textContent = SENSOR_TYPE_LABELS[type] || type;
+        left.appendChild(swatch);
+        left.appendChild(label);
+
+        const count = document.createElement("span");
+        count.className = "sensor-legend__count";
+        count.textContent = String(counts[type] || 0);
+
+        li.appendChild(left);
+        li.appendChild(count);
+        li.addEventListener("click", () => focusType(type));
+        li.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            focusType(type);
+          }
+        });
+        legendList.appendChild(li);
+      });
+    }
+
+    function updateLegendActive(id) {
+      const sensor = SENSORS.find((s) => s.id === id);
+      document.querySelectorAll(".sensor-legend__item").forEach((el) => {
+        el.classList.toggle("is-active", sensor && el.dataset.sensorType === sensor.type);
+      });
+    }
+
+    function focusType(type) {
+      const first = SENSORS.find((s) => s.type === type);
+      if (first) focusSensor(first.id);
+    }
+
+    function focusSensor(id) {
+      const entry = sensorMeshes.find((s) => s.data.id === id);
+      if (!entry) return;
+
+      clearAllHighlights(id);
+      setHighlightTargets(entry, "locked");
+      openInfoPanel(entry.data);
+
+      // Animate camera toward sensor (world-space anchor)
+      const target = new THREE.Vector3();
+      entry.mesh.getWorldPosition(target);
+      const offset = new THREE.Vector3(2.2, 1.4, 2.2);
+      const desired = target.clone().add(offset);
+
+      animateCameraTo(desired, target);
+    }
+
+    function animateCameraTo(position, lookAt) {
+      const startPos = camera.position.clone();
+      const startTarget = controls.target.clone();
+      const duration = 600;
+      const start = performance.now();
+
+      function step(now) {
+        const t = Math.min(1, (now - start) / duration);
+        const ease = 1 - Math.pow(1 - t, 3);
+        camera.position.lerpVectors(startPos, position, ease);
+        controls.target.lerpVectors(startTarget, lookAt, ease);
+        controls.update();
+        if (t < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+
+    // =========================================================================
+    // Raycasting — hover & click
+    // =========================================================================
+    function getIntersectables() {
+      return sensorMeshes.flatMap((e) => [e.mesh, e.hitMesh]);
+    }
+
+    function pickSensor(clientX, clientY) {
+      const rect = container.getBoundingClientRect();
+      mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const hits = raycaster.intersectObjects(getIntersectables(), false);
+
+      if (hits.length === 0) return null;
+
+      const hit = hits[0].object;
+      const id = hit.userData.sensorId;
+      return sensorMeshes.find((s) => s.data.id === id) || null;
+    }
+
+    function onPointerMove(event) {
+      if (selectedId) return; // locked selection — keep panel, skip hover swap
+
+      const entry = pickSensor(event.clientX, event.clientY);
+
+      if (entry !== hoveredMesh) {
+        clearAllHighlights(selectedId);
+        hoveredMesh = entry;
+
+        if (entry) {
+          setHighlightTargets(entry, "hover");
+          showHoverCard(entry);
+          container.style.cursor = "pointer";
+        } else {
+          hideAllHoverCards();
+          container.style.cursor = "grab";
+        }
+        updateLabelHighlights();
+      } else if (entry) {
+        showHoverCard(entry);
+      }
+    }
+
+    function onPointerClick(event) {
+      const entry = pickSensor(event.clientX, event.clientY);
+
+      if (entry) {
+        clearAllHighlights(entry.data.id);
+        setHighlightTargets(entry, "locked");
+        openInfoPanel(entry.data);
+        hideAllHoverCards();
+      }
+    }
+
+    // =========================================================================
+    // Scene initialization
+    // =========================================================================
+    async function init() {
+      setLoadProgress(10);
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(SCENE_THEMES.dark.bg);
+      scene.fog = new THREE.FogExp2(SCENE_THEMES.dark.fog, 0.028);
+
+      setLoadProgress(25);
+
+      camera = new THREE.PerspectiveCamera(
+        45,
+        container.clientWidth / container.clientHeight,
+        0.1,
+        100
+      );
+      camera.position.set(5.5, 3.2, 5.5);
+
+      renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: false,
+        powerPreference: "high-performance"
+      });
+      renderer.setSize(container.clientWidth, container.clientHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 0.92; // UPDATED — softer, avoid blown highlights
+      container.appendChild(renderer.domElement);
+
+      composer = new EffectComposer(renderer);
+      composer.addPass(new RenderPass(scene, camera));
+      bloomPass = new UnrealBloomPass(
+        new THREE.Vector2(container.clientWidth, container.clientHeight),
+        0.35,
+        0.4,
+        0.85
+      );
+      composer.addPass(bloomPass);
+
+      labelRenderer = new CSS2DRenderer();
+      labelRenderer.setSize(container.clientWidth, container.clientHeight);
+      labelRenderer.domElement.style.position = "absolute";
+      labelRenderer.domElement.style.inset = "0";
+      labelRenderer.domElement.style.pointerEvents = "none";
+      container.appendChild(labelRenderer.domElement);
+
+      // Image-based lighting for metallic paint & glass reflections
+      const pmrem = new THREE.PMREMGenerator(renderer);
+      const envScene = new RoomEnvironment();
+      scene.environment = pmrem.fromScene(envScene, 0.04).texture;
+
+      setLoadProgress(40);
+
+      controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.06;
+      controls.minDistance = 3;
+      controls.maxDistance = 14;
+      controls.maxPolarAngle = Math.PI / 2 - 0.05;
+      controls.target.set(0, 0.5, 0);
+
+      raycaster = new THREE.Raycaster();
+      mouse = new THREE.Vector2();
+
+      setLoadProgress(55);
+
+      hemiLight = new THREE.HemisphereLight(
+        SCENE_THEMES.dark.hemSky,
+        SCENE_THEMES.dark.hemGround,
+        0.35
+      );
+      scene.add(hemiLight);
+
+      const keyLight = new THREE.DirectionalLight(0xfff8f0, 1.05); // UPDATED — toned down key
+      keyLight.position.set(6, 10, 5);
+      keyLight.castShadow = true;
+      keyLight.shadow.mapSize.set(2048, 2048);
+      keyLight.shadow.camera.near = 0.5;
+      keyLight.shadow.camera.far = 30;
+      keyLight.shadow.camera.left = -8;
+      keyLight.shadow.camera.right = 8;
+      keyLight.shadow.camera.top = 8;
+      keyLight.shadow.camera.bottom = -8;
+      keyLight.shadow.bias = -0.00015;
+      scene.add(keyLight);
+
+      const rimLight = new THREE.DirectionalLight(0x7ec8ff, 0.38);
+      rimLight.position.set(-6, 4, -4);
+      scene.add(rimLight);
+
+      const fillLight = new THREE.DirectionalLight(0x8899aa, 0.25);
+      fillLight.position.set(0, 2, -8);
+      scene.add(fillLight);
+
+      const underGlow = new THREE.PointLight(0x4a6a8a, 0.35, 12);
+      underGlow.position.set(0, 0.3, 0);
+      scene.add(underGlow);
+
+      // ADDED — soft directional fill (dark theme, no harsh reflections)
+      const softFill = new THREE.DirectionalLight(0xc8d4e0, 0.32);
+      softFill.position.set(-4, 7, 3);
+      scene.add(softFill);
+
+      setLoadProgress(70);
+
+      sceneGrid = createSceneGrid("dark");
+      scene.add(sceneGrid);
+      sceneFloor = createShowroomFloor("dark");
+      scene.add(sceneFloor);
+      rangeRings = createRangeRings();
+      scene.add(rangeRings);
+
+      // Futuristic concept car + sensors on vehicle group
+      const vehicle = createVehicle();
+      scene.add(vehicle);
+
+      SENSORS.forEach((data) => {
+        const entry = createSensorMesh(data);
+        vehicle.add(entry.group);
+        sensorMeshes.push(entry);
+      });
+
+      setLoadProgress(85);
+
+      // Particles
+      particleSystem = createParticles();
+      scene.add(particleSystem);
+
+      buildLegend();
+      applyDisplaySettings();
+      openInfoPanel(SENSORS[0]);
+
+      setLoadProgress(100);
+
+      document.querySelectorAll(".view-thumb").forEach((btn) => {
+        btn.addEventListener("click", () => setCameraView(btn.dataset.view));
+      });
+      document.getElementById("btn-reset-view")?.addEventListener("click", () => setCameraView("3d"));
+      document.getElementById("btn-zoom-in")?.addEventListener("click", () => {
+        camera.position.multiplyScalar(0.88);
+        controls.update();
+      });
+      document.getElementById("btn-zoom-out")?.addEventListener("click", () => {
+        camera.position.multiplyScalar(1.12);
+        controls.update();
+      });
+      document.getElementById("btn-rotate")?.addEventListener("click", () => setCameraView("3d"));
+
+      document.querySelectorAll(".toggle-pill").forEach((pill) => {
+        pill.addEventListener("click", () => {
+          const key = pill.dataset.toggle;
+          displaySettings[key] = !displaySettings[key];
+          pill.classList.toggle("is-on", displaySettings[key]);
+          pill.setAttribute("aria-pressed", String(displaySettings[key]));
+          applyDisplaySettings();
+        });
+      });
+
+      // Event listeners
+      container.addEventListener("pointermove", onPointerMove);
+      container.addEventListener("click", onPointerClick);
+      panelClose.addEventListener("click", closeInfoPanel);
+
+      window.addEventListener("resize", onResize);
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closeInfoPanel();
+      });
+
+      controls.addEventListener("start", () => container.classList.add("is-dragging"));
+      controls.addEventListener("end", () => container.classList.remove("is-dragging"));
+
+      themeToggle.addEventListener("click", () => {
+        applySceneTheme(currentTheme === "dark" ? "light" : "dark");
+      });
+
+      document.querySelectorAll(".app-header__nav a").forEach((link) => {
+        link.addEventListener("click", (e) => {
+          e.preventDefault();
+          document.querySelectorAll(".app-header__nav a").forEach((a) => a.classList.remove("is-active"));
+          link.classList.add("is-active");
+        });
+      });
+
+      document.documentElement.setAttribute("data-theme", "dark");
+
+      // Hide loading overlay after first frame
+      requestAnimationFrame(() => {
+        loadingOverlay.classList.add("is-hidden");
+        animate();
+      });
+    }
+
+    function onResize() {
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+      if (composer) composer.setSize(w, h);
+      if (bloomPass) bloomPass.resolution.set(w, h);
+      if (labelRenderer) labelRenderer.setSize(w, h);
+    }
+
+    // =========================================================================
+    // Render loop — requestAnimationFrame with dirty flag
+    // =========================================================================
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const delta = clock.getDelta();
+
+      controls.update();
+      updateHighlightLerp(delta);
+
+      if (displaySettings.animations && particleSystem) {
+        particleSystem.rotation.y += delta * 0.008;
+      }
+
+      if (displaySettings.animations) {
+        lightStrips.forEach((strip, i) => {
+          strip.material.emissiveIntensity =
+            0.55 + Math.sin(clock.elapsedTime * 2.2 + i * 1.4) * 0.35;
+        });
+        if (rangeRings) {
+          rangeRings.children.forEach((ring, i) => {
+            ring.material.opacity = (0.14 - i * 0.035) * (0.85 + Math.sin(clock.elapsedTime * 1.5 + i) * 0.15);
+          });
+        }
+      }
+
+      if (composer && displaySettings.animations) {
+        composer.render();
+      } else if (composer) {
+        composer.render();
+      } else {
+        renderer.render(scene, camera);
+      }
+      if (labelRenderer) {
+        labelRenderer.render(scene, camera);
+        resolveLabelOverlaps();
+        updateLabelHighlights();
+      }
+    }
+
+    // Boot
+    init().catch((err) => {
+      console.error("Scene init failed:", err);
+      loadingOverlay.querySelector(".loading-overlay__text").textContent =
+        "Failed to load 3D scene. Check network for Three.js CDN.";
+    });
+  </script>
+</body>
+</html>
