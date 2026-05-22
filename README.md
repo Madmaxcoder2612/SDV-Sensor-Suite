@@ -34,7 +34,10 @@ An interactive web-based 3D visualization of Automotive Sensors used in modern S
 
 ## 📸 UI Preview
 
-> Add a screenshot here after running locally
+<img width="1919" height="869" alt="image" src="https://github.com/user-attachments/assets/af8b617e-9606-4951-9c09-55f4cb294a60" />
+
+<img width="1916" height="862" alt="image" src="https://github.com/user-attachments/assets/1bdcf74a-c852-411b-a083-eacebbd94d9a" />
+
 
 ---
 
