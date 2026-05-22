@@ -47,6 +47,6 @@ An interactive web-based 3D visualization of Automotive Sensors used in modern S
 
 ```bash
 
-git clone [https://github.com/YOUR_USERNAME/sdv-sensor-dashboard.git](https://github.com/YOUR_USERNAME/sdv-sensor-dashboard.git)
+git clone [https://github.com/Madmaxcoder2612/sdv-sensor-dashboard.git](https://github.com/Madmaxcoder2612/sdv-sensor-dashboard.git)
 
 cd sdv-sensor-dashboard
